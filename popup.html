@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -84,26 +45,45 @@
     button {
       padding: 8px 16px;
       font-size: 1em;
+      font-weight: bold;
       cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      background-color: #4CAF50;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.1);
       color: white;
+      transition: background-color 0.3s ease, transform 0.2s ease;
     }
     button:hover {
-      background-color: #45a049;
+      background-color: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
     }
-    button.reset {
-      background-color: #ff4444;
+    button.start {
+      background-color: rgba(76, 175, 80, 0.2);
+      border-color: #4CAF50;
     }
-    button.reset:hover {
-      background-color: #cc0000;
+    button.start:hover {
+      background-color: rgba(76, 175, 80, 0.4);
+    }
+    button.pause {
+      background-color: rgba(33, 150, 243, 0.2);
+      border-color: #2196F3;
+    }
+    button.pause:hover {
+      background-color: rgba(33, 150, 243, 0.4);
     }
     button.stop {
-      background-color: #ff9800;
+      background-color: rgba(255, 152, 0, 0.2);
+      border-color: #ff9800;
     }
     button.stop:hover {
-      background-color: #e68a00;
+      background-color: rgba(255, 152, 0, 0.4);
+    }
+    button.reset {
+      background-color: rgba(244, 67, 54, 0.2);
+      border-color: #ff4444;
+    }
+    button.reset:hover {
+      background-color: rgba(244, 67, 54, 0.4);
     }
     input[type="file"], input[type="number"], input[type="range"] {
       margin-top: 10px;
@@ -160,8 +140,8 @@
       <div id="timer">Work Time: 00:25:00</div>
     </div>
     <div class="button-group">
-      <button id="start">Start</button>
-      <button id="pause">Pause</button>
+      <button id="start" class="start">Start</button>
+      <button id="pause" class="pause">Pause</button>
       <button id="stop" class="stop">Stop</button>
       <button id="reset" class="reset">Reset</button>
     </div>

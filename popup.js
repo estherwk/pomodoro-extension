@@ -69,7 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(timerId);
       timerId = null;
       startButton.textContent = 'Start';
-      (customSound || defaultSound).play();
+      const sound = customSound || defaultSound;
+      sound.play().catch((err) => console.error('Sound playback failed:', err));
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icon48.png',
@@ -108,15 +109,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Stop button
+  // Stop Sound button
   stopButton.addEventListener('click', () => {
-    clearInterval(timerId);
-    timerId = null;
-    isWorkMode = true;
-    time = workTime;
-    updateTimerDisplay();
-    startButton.textContent = 'Start';
-    pauseButton.textContent = 'Pause';
+    const sound = customSound || defaultSound;
+    sound.pause();
+    sound.currentTime = 0; // Reset sound to start
   });
 
   // Reset button
@@ -126,8 +123,11 @@ document.addEventListener('DOMContentLoaded', () => {
     isWorkMode = true;
     workTime = 25 * 60; // Reset to default 25 minutes
     breakTime = 5 * 60; // Reset to default 5 minutes
-    time = workTime;
+    time = isWorkMode ? workTime : breakTime; // Reset count to initial value for current mode
     customSound = null; // Reset to default sound
+    const sound = defaultSound;
+    sound.pause();
+    sound.currentTime = 0; // Stop and reset sound
     document.body.style.backgroundImage = `url('default-bg.png')`; // Reset to default background
     workTimeInput.value = 25;
     breakTimeInput.value = 5;

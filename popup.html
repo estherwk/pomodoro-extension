@@ -1,0 +1,192 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Pomodoro Timer</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      background-image: url('default-bg.png');
+      background-size: cover;
+      background-position: center;
+      color: white;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #timer {
+      font-size: 2em;
+      font-weight: bold;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px 10px;
+      border-radius: 4px;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #mode {
+      font-size: 1.4em;
+      font-weight: bold;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 5px 10px;
+      border-radius: 4px;
+      color: #4CAF50;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px 16px;
+      font-size: 1em;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button.reset {
+      background-color: #ff4444;
+    }
+    button.reset:hover {
+      background-color: #cc0000;
+    }
+    button.stop {
+      background-color: #ff9800;
+    }
+    button.stop:hover {
+      background-color: #e68a00;
+    }
+    input[type="file"], input[type="number"], input[type="range"] {
+      margin-top: 10px;
+      width: 150px;
+      background-color: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      color: white;
+      padding: 2px;
+      border-radius: 4px;
+    }
+    input[type="file"] {
+      padding: 2px 0;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      opacity: 0.7;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: rgba(255, 255, 255, 0.3);
+      height: 5px;
+      border-radius: 3px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      background: #4CAF50;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      margin-top: -5px;
+    }
+    label {
+      font-size: 0.9em;
+    }
+    #volumeValue {
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+    .button-group {
+      display: flex;
+      gap: 5px;
+    }
+    .timer-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="timer-container">
+      <div id="mode">Work</div>
+      <div id="timer">Work Time: 00:25:00</div>
+    </div>
+    <div class="button-group">
+      <button id="start">Start</button>
+      <button id="pause">Pause</button>
+      <button id="stop" class="stop">Stop</button>
+      <button id="reset" class="reset">Reset</button>
+    </div>
+    <div>
+      <label for="workTime">Work Time (min):</label>
+      <input type="number" id="workTime" min="1" max="60" value="25">
+    </div>
+    <div>
+      <label for="breakTime">Break Time (min):</label>
+      <input type="number" id="breakTime" min="1" max="60" value="5">
+    </div>
+    <div>
+      <label for="volume">Sound Volume:</label>
+      <input type="range" id="volume" min="0" max="100" value="50">
+      <div id="volumeValue">50%</div>
+    </div>
+    <div>
+      <label for="soundInput">Custom Sound:</label>
+      <input type="file" id="soundInput" accept="audio/*">
+    </div>
+    <div>
+      <label for="bgInput">Background Image:</label>
+      <input type="file" id="bgInput" accept="image/*">
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

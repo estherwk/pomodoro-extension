@@ -32,3 +32,6 @@ A minimalist, customizable Pomodoro timer designed to help you focus better — 
 ### 1. Clone or Download
 ```bash
 git clone https://github.com/yourusername/night-pomodoro-extension.git
+
+Download :https://microsoftedge.microsoft.com/addons/detail/night-themed-pomodoro-tim/jceihfhgancgecngkfanmbaaejkpcphd
+

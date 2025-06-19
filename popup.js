@@ -1,12 +1,3 @@
-let workTime = 25 * 60;
-let breakTime = 5 * 60;
-let time = workTime;
-let isWorkMode = true;
-let timerId = null;
-let customSound = null;
-let defaultSound = new Audio('default-sound.mp3');
-let volume = 0.5;
-
 document.addEventListener('DOMContentLoaded', () => {
   const timerDisplay = document.getElementById('timer');
   const modeDisplay = document.getElementById('mode');
@@ -21,136 +12,122 @@ document.addEventListener('DOMContentLoaded', () => {
   const soundInput = document.getElementById('soundInput');
   const bgInput = document.getElementById('bgInput');
 
-  // Load saved settings
-  chrome.storage.local.get(['customSound', 'customBg', 'workTime', 'breakTime', 'volume'], (data) => {
-    if (data.customBg) {
-      document.body.style.backgroundImage = `url(${data.customBg})`;
-    } else {
-      document.body.style.backgroundImage = `url('default-bg.png')`;
-    }
-    if (data.customSound) {
-      customSound = new Audio(data.customSound);
-      customSound.volume = data.volume || 0.5;
-    }
-    defaultSound.volume = data.volume || 0.5;
-    if (data.workTime) {
-      workTime = data.workTime * 60;
-      workTimeInput.value = data.workTime;
-      if (isWorkMode) time = workTime;
-    }
-    if (data.breakTime) {
-      breakTime = data.breakTime * 60;
-      breakTimeInput.value = data.breakTime;
-      if (!isWorkMode) time = breakTime;
-    }
-    if (data.volume) {
-      volume = data.volume;
-      volumeInput.value = data.volume * 100;
-      volumeValue.textContent = `${Math.round(data.volume * 100)}%`;
-    }
-    updateTimerDisplay();
-  });
+  let currentSound = null;
+  let defaultSound = new Audio('default-sound.mp3');
+  let volume = 0.5;
 
-  // Update timer display
-  function updateTimerDisplay() {
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
-    const seconds = time % 60;
-    timerDisplay.textContent = `${isWorkMode ? 'Work Time' : 'Break Time'}: ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    modeDisplay.textContent = isWorkMode ? 'Work' : 'Break';
+  // Update UI with timer state
+  function updateUI(state) {
+    if (!state) {
+      console.error('Invalid state received:', state);
+      return;
+    }
+    const hours = Math.floor(state.time / 3600);
+    const minutes = Math.floor((state.time % 3600) / 60);
+    const seconds = state.time % 60;
+    timerDisplay.textContent = `${state.isWorkMode ? 'Work Time' : 'Break Time'}: ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    modeDisplay.textContent = state.isWorkMode ? 'Work' : 'Break';
+    pauseButton.textContent = state.isRunning ? 'Pause' : 'Resume';
+    workTimeInput.value = state.workTime / 60;
+    breakTimeInput.value = state.breakTime / 60;
+    volumeInput.value = state.volume * 100;
+    volumeValue.textContent = `${Math.round(state.volume * 100)}%`;
+    volume = state.volume;
+    defaultSound.volume = volume;
+    if (currentSound) currentSound.volume = volume;
+    console.log('UI updated with state:', state);
   }
 
-  // Timer logic
-  function updateTimer() {
-    if (time > 0) {
-      time--;
-      updateTimerDisplay();
-    } else {
-      clearInterval(timerId);
-      timerId = null;
-      startButton.textContent = 'Start';
-      const sound = customSound || defaultSound;
-      sound.play().catch((err) => console.error('Sound playback failed:', err));
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon48.png',
-        title: 'Pomodoro Timer',
-        message: isWorkMode ? 'Work session complete! Time for a break.' : 'Break time is up! Back to work.'
-      });
-      // Switch mode
-      isWorkMode = !isWorkMode;
-      time = isWorkMode ? workTime : breakTime;
-      updateTimerDisplay();
-      // Auto-start next session
-      timerId = setInterval(updateTimer, 1000);
-      startButton.textContent = 'Start';
-      pauseButton.textContent = 'Pause';
+  // Request initial state from background
+  chrome.runtime.sendMessage({ action: 'getState' }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Error getting initial state:', chrome.runtime.lastError);
+      return;
     }
+    if (response && response.success) {
+      updateUI(response.state);
+      console.log('Initial state received:', response.state);
+    } else {
+      console.error('No valid state received:', response);
+    }
+  });
+
+  // Listen for state updates from background
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'updateState') {
+      updateUI(message.state);
+    } else if (message.action === 'playSound') {
+      if (currentSound) {
+        currentSound.pause();
+        currentSound.currentTime = 0;
+      }
+      currentSound = message.customSound ? new Audio(message.customSound) : defaultSound;
+      currentSound.volume = message.volume;
+      currentSound.loop = true; // Loop sound in popup
+      currentSound.play().catch((err) => console.error('Popup sound playback failed:', err));
+      console.log('Popup playing sound:', message.customSound || 'default-sound.mp3');
+    }
+  });
+
+  // Send message with error handling
+  function sendMessage(action, data = {}) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ action, ...data }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error(`Error sending ${action} message:`, chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+        } else if (response && response.success) {
+          console.log(`${action} message sent, response:`, response);
+          resolve(response);
+        } else {
+          console.error(`Invalid response for ${action}:`, response);
+          reject(new Error('Invalid response'));
+        }
+      });
+    });
   }
 
   // Start button
   startButton.addEventListener('click', () => {
-    if (!timerId) {
-      timerId = setInterval(updateTimer, 1000);
-      startButton.textContent = 'Start';
-      pauseButton.textContent = 'Pause';
-    }
+    sendMessage('start').catch(() => {});
   });
 
-  // Pause button
+  // Pause/Resume button
   pauseButton.addEventListener('click', () => {
-    if (timerId) {
-      clearInterval(timerId);
-      timerId = null;
-      pauseButton.textContent = 'Resume';
-    } else if (pauseButton.textContent === 'Resume') {
-      timerId = setInterval(updateTimer, 1000);
-      pauseButton.textContent = 'Pause';
-    }
+    sendMessage(pauseButton.textContent === 'Pause' ? 'pause' : 'resume').catch(() => {});
   });
 
   // Stop Sound button
   stopButton.addEventListener('click', () => {
-    const sound = customSound || defaultSound;
-    sound.pause();
-    sound.currentTime = 0; // Reset sound to start
+    if (currentSound) {
+      currentSound.pause();
+      currentSound.currentTime = 0;
+      currentSound = null;
+      console.log('Popup sound stopped');
+    }
+    sendMessage('stopSound').catch(() => {});
   });
 
   // Reset button
   resetButton.addEventListener('click', () => {
-    clearInterval(timerId);
-    timerId = null;
-    isWorkMode = true;
-    workTime = 25 * 60; // Reset to default 25 minutes
-    breakTime = 5 * 60; // Reset to default 5 minutes
-    time = isWorkMode ? workTime : breakTime; // Reset count to initial value for current mode
-    customSound = null; // Reset to default sound
-    const sound = defaultSound;
-    sound.pause();
-    sound.currentTime = 0; // Stop and reset sound
-    document.body.style.backgroundImage = `url('default-bg.png')`; // Reset to default background
-    workTimeInput.value = 25;
-    breakTimeInput.value = 5;
-    chrome.storage.local.set({ workTime: 25, breakTime: 5 });
-    chrome.storage.local.remove(['customSound', 'customBg']);
-    defaultSound.volume = volume;
-    updateTimerDisplay();
-    startButton.textContent = 'Start';
-    pauseButton.textContent = 'Pause';
+    sendMessage('reset').catch(() => {});
+    if (currentSound) {
+      currentSound.pause();
+      currentSound.currentTime = 0;
+      currentSound = null;
+      console.log('Popup sound stopped on reset');
+    }
   });
 
   // Work time input
   workTimeInput.addEventListener('change', (e) => {
     const value = parseInt(e.target.value);
     if (value >= 1 && value <= 60) {
-      workTime = value * 60;
-      chrome.storage.local.set({ workTime: value });
-      if (isWorkMode) {
-        time = workTime;
-        updateTimerDisplay();
-      }
+      sendMessage('setWorkTime', { workTime: value * 60 }).catch(() => {});
     } else {
-      e.target.value = workTime / 60;
+      sendMessage('getState').then((response) => {
+        if (response && response.state) e.target.value = response.state.workTime / 60;
+      }).catch(() => {});
     }
   });
 
@@ -158,24 +135,22 @@ document.addEventListener('DOMContentLoaded', () => {
   breakTimeInput.addEventListener('change', (e) => {
     const value = parseInt(e.target.value);
     if (value >= 1 && value <= 60) {
-      breakTime = value * 60;
-      chrome.storage.local.set({ breakTime: value });
-      if (!isWorkMode) {
-        time = breakTime;
-        updateTimerDisplay();
-      }
+      sendMessage('setBreakTime', { breakTime: value * 60 }).catch(() => {});
     } else {
-      e.target.value = breakTime / 60;
+      sendMessage('getState').then((response) => {
+        if (response && response.state) e.target.value = response.state.breakTime / 60;
+      }).catch(() => {});
     }
   });
 
   // Volume input
   volumeInput.addEventListener('input', (e) => {
-    volume = e.target.value / 100;
+    const value = e.target.value / 100;
     volumeValue.textContent = `${e.target.value}%`;
-    if (customSound) customSound.volume = volume;
-    defaultSound.volume = volume;
-    chrome.storage.local.set({ volume: volume });
+    volume = value;
+    defaultSound.volume = value;
+    if (currentSound) currentSound.volume = value;
+    sendMessage('setVolume', { volume: value }).catch(() => {});
   });
 
   // Custom sound upload
@@ -184,9 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        customSound = new Audio(event.target.result);
-        customSound.volume = volume;
-        chrome.storage.local.set({ customSound: event.target.result });
+        sendMessage('setCustomSound', { customSound: event.target.result }).catch(() => {});
       };
       reader.readAsDataURL(file);
     }
@@ -200,8 +173,19 @@ document.addEventListener('DOMContentLoaded', () => {
       reader.onload = (event) => {
         document.body.style.backgroundImage = `url(${event.target.result})`;
         chrome.storage.local.set({ customBg: event.target.result });
+        console.log('Background image set:', event.target.result);
       };
       reader.readAsDataURL(file);
+    }
+  });
+
+  // Load saved background
+  chrome.storage.local.get(['customBg'], (data) => {
+    if (data.customBg) {
+      document.body.style.backgroundImage = `url(${data.customBg})`;
+      console.log('Loaded saved background:', data.customBg);
+    } else {
+      document.body.style.backgroundImage = `url('default-bg.png')`;
     }
   });
 });
